@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "prisma": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "prisma",
+        "mcp"
+      ],
+      "env": {}
+    },
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "${DATABASE_URL_READONLY}"
+      ],
+      "env": {}
+    }
+  }
+}
