@@ -59,13 +59,13 @@ export function createProgram(): Command {
       ) => {
         const sink = createJsonlFileSink('logs');
         const logger = createAuditLogger(sink);
+        let readonlyDb:
+          ReturnType<typeof createReadonlyDatabaseClient> | undefined;
 
         try {
           const client = createAnthropicClient();
           const model = getModel();
-          const readonlyDb = createReadonlyDatabaseClient(
-            getReadonlyDatabaseUrl(),
-          );
+          readonlyDb = createReadonlyDatabaseClient(getReadonlyDatabaseUrl());
           const tools = [
             createRunSqlTool({ query: readonlyDb.query }),
             createListTaskCategoriesTool({ query: readonlyDb.query }),
@@ -82,6 +82,8 @@ export function createProgram(): Command {
           console.error(formatErrorMessage(error));
           console.error(`Részletek: ${sink.filePath}`);
           process.exitCode = 1;
+        } finally {
+          await readonlyDb?.close();
         }
       },
     );

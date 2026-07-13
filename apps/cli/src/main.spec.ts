@@ -1,6 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createProgram } from './main.js';
+const closeSpy = vi.fn(async () => undefined);
+const queryMock = vi.fn(async () => [] as Record<string, unknown>[]);
+const askAgentMock = vi.fn(async () => ({
+  answer: 'teszt válasz',
+  systemPrompt: '<role></role>',
+  userMessage: '<question></question>',
+}));
+
+vi.mock('@ledgerbase/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@ledgerbase/core')>();
+  return {
+    ...actual,
+    createReadonlyDatabaseClient: vi.fn(() => ({
+      query: queryMock,
+      close: closeSpy,
+    })),
+    askAgent: askAgentMock,
+  };
+});
+
+const { createProgram } = await import('./main.js');
 
 describe('createProgram ask action', () => {
   const originalEnv = { ...process.env };
@@ -10,6 +30,8 @@ describe('createProgram ask action', () => {
     process.env.DATABASE_URL_READONLY =
       'postgresql://user:pass@localhost:5432/db';
     delete process.env.ANTHROPIC_API_KEY;
+    closeSpy.mockClear();
+    askAgentMock.mockClear();
   });
 
   afterEach(() => {
@@ -32,5 +54,15 @@ describe('createProgram ask action', () => {
     expect(process.exitCode).toBe(1);
 
     errorSpy.mockRestore();
+  });
+
+  it('closes the read-only database pool after a successful run', async () => {
+    process.env.ANTHROPIC_API_KEY = 'fake-key';
+
+    const program = createProgram();
+    await program.parseAsync(['node', 'ledgerbase', 'ask', 'kérdés']);
+
+    expect(askAgentMock).toHaveBeenCalledTimes(1);
+    expect(closeSpy).toHaveBeenCalledTimes(1);
   });
 });

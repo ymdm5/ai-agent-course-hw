@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 
 export interface ReadonlyDatabaseClient {
   query: (sql: string) => Promise<Record<string, unknown>[]>;
+  close: () => Promise<void>;
 }
 
 // Must only ever be constructed with DATABASE_URL_READONLY — never the
@@ -15,5 +16,6 @@ export function createReadonlyDatabaseClient(
       const result = await pool.query(sql);
       return result.rows;
     },
+    close: () => pool.end(),
   };
 }
