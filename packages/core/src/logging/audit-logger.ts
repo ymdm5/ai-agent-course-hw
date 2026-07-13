@@ -3,6 +3,7 @@ import {
   type AuditEvent,
   type AuditEventInput,
 } from './audit-event-schema.js';
+import { redactSecretsInString } from './secret-redaction.js';
 
 export interface AuditSink {
   write: (line: string) => void;
@@ -38,5 +39,6 @@ function redact(value: unknown): unknown {
       ]),
     );
   }
+  if (typeof value === 'string') return redactSecretsInString(value);
   return value;
 }

@@ -33,6 +33,17 @@ describe('formatErrorMessage', () => {
     expect(message).not.toContain('ECONNREFUSED');
   });
 
+  it('redacts a connection string embedded in an AgentError message', () => {
+    const message = formatErrorMessage(
+      new AgentError(
+        'database_error',
+        'connection to postgresql://ledgerbase:ledgerbase@localhost:5433/ledgerbase failed',
+      ),
+    );
+    expect(message).not.toContain('ledgerbase:ledgerbase');
+    expect(message).toContain('[REDACTED_CONNECTION_STRING]');
+  });
+
   it('handles non-Error thrown values without crashing', () => {
     const message = formatErrorMessage('just a string');
     expect(typeof message).toBe('string');

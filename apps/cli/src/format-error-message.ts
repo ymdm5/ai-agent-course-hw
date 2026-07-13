@@ -1,4 +1,8 @@
-import { AgentError, type AgentErrorCategory } from '@ledgerbase/core';
+import {
+  AgentError,
+  redactSecretsInString,
+  type AgentErrorCategory,
+} from '@ledgerbase/core';
 
 const CATEGORY_MESSAGES: Record<AgentErrorCategory, string> = {
   input_validation: 'Érvénytelen bemenet: a kérdés nem lehet üres.',
@@ -12,7 +16,7 @@ const CATEGORY_MESSAGES: Record<AgentErrorCategory, string> = {
 
 export function formatErrorMessage(error: unknown): string {
   if (error instanceof AgentError) {
-    return `${CATEGORY_MESSAGES[error.category]} (${error.message})`;
+    return `${CATEGORY_MESSAGES[error.category]} (${redactSecretsInString(error.message)})`;
   }
   return 'Váratlan hiba történt a futás során.';
 }

@@ -60,6 +60,26 @@ describe('createAuditLogger', () => {
     expect(parsed.data.message).toBe('something failed');
   });
 
+  it('redacts a secret embedded inside a string value under an innocuous key', () => {
+    const sink = fakeSink();
+    const logger = createAuditLogger(sink);
+
+    logger.log({
+      runId: 'run-1',
+      eventType: 'tool_result',
+      data: {
+        toolName: 'runSql',
+        ok: false,
+        error:
+          'connection to postgresql://ledgerbase:ledgerbase@localhost:5433/ledgerbase failed',
+      },
+    });
+
+    const parsed = JSON.parse(sink.lines[0] ?? '{}');
+    expect(parsed.data.error).not.toContain('ledgerbase:ledgerbase');
+    expect(parsed.data.error).toContain('[REDACTED_CONNECTION_STRING]');
+  });
+
   it('does not redact legitimate token usage fields', () => {
     const sink = fakeSink();
     const logger = createAuditLogger(sink);

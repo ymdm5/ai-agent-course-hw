@@ -17,6 +17,7 @@ export type {
   AuditEvent,
   AuditEventInput,
 } from './logging/audit-event-schema.js';
+export { redactSecretsInString } from './logging/secret-redaction.js';
 
 export { AgentError } from './errors/agent-error.js';
 export type { AgentErrorCategory } from './errors/agent-error.js';
