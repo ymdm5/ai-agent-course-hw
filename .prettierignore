@@ -4,3 +4,11 @@
 /.nx/cache
 /.nx/workspace-data
 .nx/self-healing
+
+# Package manager metadata — owned by pnpm, not by us
+pnpm-lock.yaml
+
+# Hand-authored project documentation — not part of the TS source tree conventions
+/README.md
+/docs/**
+/.mcp.json
