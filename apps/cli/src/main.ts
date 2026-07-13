@@ -4,6 +4,7 @@ import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   askAgent,
+  createAuditLogger,
   createListTaskCategoriesTool,
   createReadonlyDatabaseClient,
   createRunSqlTool,
@@ -11,6 +12,8 @@ import {
 import { Command } from 'commander';
 
 import { runAskCommand } from './ask-command.js';
+import { formatErrorMessage } from './format-error-message.js';
+import { createJsonlFileSink } from './jsonl-file-sink.js';
 
 function createAnthropicClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -54,6 +57,8 @@ export function createProgram(): Command {
         question: string | undefined,
         options: { showPrompt: boolean },
       ) => {
+        const sink = createJsonlFileSink('logs');
+        const logger = createAuditLogger(sink);
         const client = createAnthropicClient();
         const model = getModel();
         const readonlyDb = createReadonlyDatabaseClient(
@@ -64,10 +69,19 @@ export function createProgram(): Command {
           createListTaskCategoriesTool({ query: readonlyDb.query }),
         ];
 
-        await runAskCommand(
-          { question, showPrompt: options.showPrompt },
-          { askAgent: (q) => askAgent({ client, model, question: q, tools }) },
-        );
+        try {
+          await runAskCommand(
+            { question, showPrompt: options.showPrompt },
+            {
+              askAgent: (q) =>
+                askAgent({ client, model, question: q, tools, logger }),
+            },
+          );
+        } catch (error) {
+          console.error(formatErrorMessage(error));
+          console.error(`Részletek: ${sink.filePath}`);
+          process.exitCode = 1;
+        }
       },
     );
 

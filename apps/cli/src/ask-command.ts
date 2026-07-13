@@ -1,5 +1,11 @@
 import * as readline from 'node:readline';
 
+export interface AskAgentResult {
+  answer: string;
+  systemPrompt: string;
+  userMessage: string;
+}
+
 export interface AskCommandOptions {
   question?: string;
   showPrompt: boolean;
@@ -11,7 +17,7 @@ export interface AskCommandStreams {
 }
 
 export interface AskCommandDeps {
-  askAgent: (question: string) => Promise<string>;
+  askAgent: (question: string) => Promise<AskAgentResult>;
   streams?: AskCommandStreams;
 }
 
@@ -28,16 +34,17 @@ export async function runAskCommand(
   const streams = deps.streams ?? defaultStreams;
 
   if (options.question !== undefined) {
-    const answer = await deps.askAgent(options.question);
-    streams.output.write(`${answer}\n`);
+    const result = await deps.askAgent(options.question);
+    writeResult(result, options.showPrompt, streams);
     return;
   }
 
-  await runInteractiveAsk(deps.askAgent, streams);
+  await runInteractiveAsk(deps.askAgent, options.showPrompt, streams);
 }
 
 async function runInteractiveAsk(
   askAgent: AskCommandDeps['askAgent'],
+  showPrompt: boolean,
   streams: AskCommandStreams,
 ): Promise<void> {
   const rl = readline.createInterface({
@@ -46,8 +53,28 @@ async function runInteractiveAsk(
   });
   for await (const line of rl) {
     if (EXIT_COMMANDS.has(line.trim().toLowerCase())) break;
-    const answer = await askAgent(line);
-    streams.output.write(`${answer}\n`);
+    const result = await askAgent(line);
+    writeResult(result, showPrompt, streams);
   }
   rl.close();
+}
+
+function writeResult(
+  result: AskAgentResult,
+  showPrompt: boolean,
+  streams: AskCommandStreams,
+): void {
+  if (showPrompt) {
+    streams.output.write(`${formatPromptDisplay(result)}\n\n`);
+  }
+  streams.output.write(`${result.answer}\n`);
+}
+
+function formatPromptDisplay(result: AskAgentResult): string {
+  return [
+    '--- system prompt ---',
+    result.systemPrompt,
+    '--- user message ---',
+    result.userMessage,
+  ].join('\n');
 }
