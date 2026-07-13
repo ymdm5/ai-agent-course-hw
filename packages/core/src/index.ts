@@ -5,3 +5,5 @@ export type { AgentTool } from './agents/agent-loop.js';
 export { createRunSqlTool } from './tools/run-sql/run-sql-tool.js';
 export { createReadonlyDatabaseClient } from './tools/run-sql/readonly-database-client.js';
 export type { ReadonlyDatabaseClient } from './tools/run-sql/readonly-database-client.js';
+
+export { createListTaskCategoriesTool } from './tools/list-task-categories/list-task-categories-tool.js';
