@@ -379,6 +379,7 @@ pnpm cli ask --show-prompt "Milyen feladatkategóriák vannak, és melyikhez tar
 - `--show-prompt`;
 - automatizált tesztek;
 - javított és indokolt system prompt;
+- `docs/roi.md`;
 - legalább három releváns Claude Code plugin vagy skill.
 
 ### Nincs benne
@@ -405,9 +406,8 @@ A projekt döntéseinek elsődleges dokumentumai:
 - `konvenciok.md` — TypeScript-, fájlszervezési, tesztelési és naplózási szabályok;
 - `dev-workflow.md` — branching, Conventional Commits, hookok és kész-kritérium;
 - `implementation-plan.md` — a végrehajtott fázisolt terv (környezet + 5 implementációs fázis);
+- `roi.md` — a hard ROI részletes, lépésenkénti levezetése;
 - az L2 agent tényleges system promptja kódban él: `packages/core/src/agents/ledgerbase/ledgerbase-prompt.ts` (séma, szabályok, toolok, példák).
-
-> Megjegyzés: a `docs/roi.md` (pénzügyi megtérülés-levezetés) a BRS-ben tervezett, de még nem elkészült dokumentum — nem része a jelenlegi implementációnak.
 
 A README a futtatás és az első belépés dokumentuma. Részletes architekturális vagy üzleti döntést ne duplikáljon indokolatlanul: arra a fenti forrásdokumentumok szolgálnak.
 
