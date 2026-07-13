@@ -54,6 +54,12 @@ describe('buildLedgerbaseSystemPrompt', () => {
     expect(prompt).toContain('<examples>');
     expect(prompt).toContain('tc.name ILIKE');
   });
+
+  it('describes listTaskCategories and instructs preferring it for category-listing questions', () => {
+    const prompt = buildLedgerbaseSystemPrompt({ currentDate: '2026-07-13' });
+    expect(prompt).toContain('listTaskCategories');
+    expect(prompt.toLowerCase()).toContain('kategóriák felsorolásáról');
+  });
 });
 
 describe('buildUserMessage', () => {

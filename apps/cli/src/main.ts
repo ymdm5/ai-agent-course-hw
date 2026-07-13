@@ -4,6 +4,7 @@ import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   askAgent,
+  createListTaskCategoriesTool,
   createReadonlyDatabaseClient,
   createRunSqlTool,
 } from '@ledgerbase/core';
@@ -58,7 +59,10 @@ export function createProgram(): Command {
         const readonlyDb = createReadonlyDatabaseClient(
           getReadonlyDatabaseUrl(),
         );
-        const tools = [createRunSqlTool({ query: readonlyDb.query })];
+        const tools = [
+          createRunSqlTool({ query: readonlyDb.query }),
+          createListTaskCategoriesTool({ query: readonlyDb.query }),
+        ];
 
         await runAskCommand(
           { question, showPrompt: options.showPrompt },
