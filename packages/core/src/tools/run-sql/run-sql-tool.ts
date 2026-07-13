@@ -6,6 +6,14 @@ import { validateSql } from './sql-guard.js';
 
 const RunSqlInputSchema = z.object({ sql: z.string().min(1) });
 
+// Rows come from an arbitrary (guard-restricted) SELECT, so their column set
+// can't be fixed — but every value must still be JSON-safe, since it flows
+// into the audit log and the tool_result payload sent back to the model.
+const RunSqlRowSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.instanceof(Date)]),
+);
+
 export interface RunSqlToolDeps {
   query: (sql: string) => Promise<Record<string, unknown>[]>;
 }
@@ -47,7 +55,8 @@ export function createRunSqlTool(deps: RunSqlToolDeps): AgentTool {
 
       try {
         const rows = await deps.query(parsed.data.sql);
-        return { ok: true, data: rows };
+        const validatedRows = z.array(RunSqlRowSchema).parse(rows);
+        return { ok: true, data: validatedRows };
       } catch (error) {
         return {
           ok: false,

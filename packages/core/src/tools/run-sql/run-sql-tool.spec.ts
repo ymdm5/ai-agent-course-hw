@@ -37,6 +37,18 @@ describe('createRunSqlTool', () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it('returns a database_error outcome when a returned row contains a value of an unexpected shape', async () => {
+    const query = vi.fn(async () => [{ id: 1, weird: { nested: 'object' } }]);
+    const tool = createRunSqlTool({ query });
+
+    const outcome = await tool.execute({
+      sql: 'SELECT id, weird FROM clients LIMIT 10',
+    });
+
+    expect(outcome.ok).toBe(false);
+    expect(!outcome.ok && outcome.category).toBe('database_error');
+  });
+
   it('returns a database_error outcome when the database query fails', async () => {
     const query = vi.fn(async () => {
       throw new Error('connection lost');
