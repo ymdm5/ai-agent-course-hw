@@ -2,7 +2,11 @@
 import 'dotenv/config';
 
 import Anthropic from '@anthropic-ai/sdk';
-import { askAgent } from '@ledgerbase/core';
+import {
+  askAgent,
+  createReadonlyDatabaseClient,
+  createRunSqlTool,
+} from '@ledgerbase/core';
 import { Command } from 'commander';
 
 import { runAskCommand } from './ask-command.js';
@@ -17,6 +21,12 @@ function getModel(): string {
   const model = process.env.ANTHROPIC_MODEL;
   if (!model) throw new Error('ANTHROPIC_MODEL is not set.');
   return model;
+}
+
+function getReadonlyDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL_READONLY;
+  if (!url) throw new Error('DATABASE_URL_READONLY is not set.');
+  return url;
 }
 
 export function createProgram(): Command {
@@ -45,10 +55,14 @@ export function createProgram(): Command {
       ) => {
         const client = createAnthropicClient();
         const model = getModel();
+        const readonlyDb = createReadonlyDatabaseClient(
+          getReadonlyDatabaseUrl(),
+        );
+        const tools = [createRunSqlTool({ query: readonlyDb.query })];
 
         await runAskCommand(
           { question, showPrompt: options.showPrompt },
-          { askAgent: (q) => askAgent({ client, model, question: q }) },
+          { askAgent: (q) => askAgent({ client, model, question: q, tools }) },
         );
       },
     );

@@ -1,7 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 
-import type { MessagesClient } from '../agent-loop.js';
+import type { AgentTool, MessagesClient } from '../agent-loop.js';
 import { askAgent } from './ledgerbase-agent.js';
 
 describe('askAgent', () => {
@@ -51,5 +51,43 @@ describe('askAgent', () => {
     expect(capturedMessages[0]?.content).toBe(
       '<question>\nMennyi 2+2?\n</question>',
     );
+  });
+
+  it('passes provided tools through so the model can use them', async () => {
+    let capturedTools: unknown;
+    const client: MessagesClient = {
+      messages: {
+        create: async (params) => {
+          capturedTools = params.tools;
+          return {
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any;
+        },
+      },
+    };
+
+    const tool: AgentTool = {
+      name: 'runSql',
+      description: 'desc',
+      inputSchema: { type: 'object', properties: {} },
+      execute: async () => ({ ok: true, data: [] }),
+    };
+
+    await askAgent({
+      client,
+      model: 'm',
+      question: 'Mely ügyfeleknek van lejárt feladata?',
+      tools: [tool],
+    });
+
+    expect(capturedTools).toEqual([
+      {
+        name: 'runSql',
+        description: 'desc',
+        input_schema: { type: 'object', properties: {} },
+      },
+    ]);
   });
 });

@@ -1,4 +1,8 @@
-import { runAgentLoop, type MessagesClient } from '../agent-loop.js';
+import {
+  runAgentLoop,
+  type AgentTool,
+  type MessagesClient,
+} from '../agent-loop.js';
 import { AskInputSchema } from './ask-input-schema.js';
 import {
   buildLedgerbaseSystemPrompt,
@@ -10,6 +14,7 @@ export interface AskAgentOptions {
   model: string;
   question: string;
   currentDate?: string;
+  tools?: AgentTool[];
 }
 
 export async function askAgent(options: AskAgentOptions): Promise<string> {
@@ -22,5 +27,6 @@ export async function askAgent(options: AskAgentOptions): Promise<string> {
     model: options.model,
     system: buildLedgerbaseSystemPrompt({ currentDate }),
     messages: [{ role: 'user', content: buildUserMessage(question) }],
+    tools: options.tools,
   });
 }
