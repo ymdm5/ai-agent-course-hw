@@ -1,0 +1,17 @@
+# Add files here to ignore them from prettier formatting
+/dist
+/coverage
+/.nx/cache
+/.nx/workspace-data
+.nx/self-healing
+
+# Package manager metadata — owned by pnpm, not by us
+pnpm-lock.yaml
+
+# Generated Prisma client — not hand-authored
+packages/db/src/generated/
+
+# Hand-authored project documentation — not part of the TS source tree conventions
+/README.md
+/docs/**
+/.mcp.json

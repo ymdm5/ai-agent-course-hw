@@ -132,9 +132,8 @@ ledgerbase/
 │   │       │   └── list-task-categories/
 │   │       └── logging/
 │   └── db/                   # Prisma séma, migrációk, kliens és seed
-├── docs/                     # BRS, architektúra, stack, workflow, ROI
+├── docs/                     # BRS, architektúra, stack, workflow, implementációs terv
 ├── docker-compose.yml        # lokális PostgreSQL + DB-role-ok
-├── .env.example              # secret nélküli környezeti változó-sablon
 └── CLAUDE.md                 # L1 projektkontextus a Claude Code számára
 ```
 
@@ -157,27 +156,28 @@ A repositoryt, a Claude Code-ot, a pnpm parancsokat és a Docker Compose művele
 
 ## Környezeti változók
 
-Másold le a secret nélküli mintafájlt:
-
-```bash
-cp .env.example .env
-```
-
-A `.env` legalább az alábbi változókat tartalmazza:
+A `.env` fájlt kézzel kell létrehozni a repo gyökerében, legalább az alábbi változókkal:
 
 ```dotenv
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=
 DATABASE_URL=
 DATABASE_URL_READONLY=
+POSTGRES_DB=
+POSTGRES_PORT=
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_RO_USER=
+POSTGRES_RO_PASSWORD=
 ```
+
+A `POSTGRES_*` változókat a `docker-compose.yml` használja a helyi Postgres és a két DB-role (read-write + read-only) létrehozásához; ezeknek összhangban kell lenniük a `DATABASE_URL`/`DATABASE_URL_READONLY` connection stringekkel.
 
 Biztonsági szabályok:
 
 - a `.env` szerepeljen a `.gitignore` fájlban;
 - valódi API-kulcs vagy adatbázis-jelszó ne kerüljön Gitbe;
-- secret vagy teljes connection string ne kerüljön a konzolkimenetbe vagy a naplókba;
-- a `.env.example` csak kitöltetlen vagy nem érzékeny példaértékeket tartalmazzon.
+- secret vagy teljes connection string ne kerüljön a konzolkimenetbe vagy a naplókba.
 
 ---
 
@@ -187,8 +187,7 @@ Biztonsági szabályok:
 # 1. Függőségek telepítése
 pnpm install
 
-# 2. Környezeti változók létrehozása
-cp .env.example .env
+# 2. .env létrehozása és kitöltése (lásd fent)
 
 # 3. PostgreSQL indítása
 docker compose up -d
@@ -198,9 +197,13 @@ pnpm db:migrate
 
 # 5. Szintetikus seed betöltése
 pnpm db:seed
+
+# 6. Ellenőrzés
+pnpm build && pnpm typecheck && pnpm lint && pnpm test
+pnpm cli ask "Mely ügyfeleknek van lejárt, még nyitott áfabevallási feladata, és ki a felelős könyvelőjük?"
 ```
 
-> A végleges scriptneveket és a lokális PostgreSQL-portot a scaffold elkészülte után a `package.json`, a `docker-compose.yml` és a `.env.example` alapján ellenőrizni kell. A dokumentáció és a futó konfiguráció nem térhet el egymástól.
+A lokális PostgreSQL a `5433`-as porton fut (lásd `docker-compose.yml` / `.env`), hogy ne ütközzön egy esetleges már futó, alapértelmezett portú Postgres-szel.
 
 ---
 
@@ -375,9 +378,8 @@ pnpm cli ask --show-prompt "Milyen feladatkategóriák vannak, és melyikhez tar
 - JSONL naplózás;
 - `--show-prompt`;
 - automatizált tesztek;
-- `.env.example`;
-- `docs/roi.md`;
 - javított és indokolt system prompt;
+- `docs/roi.md`;
 - legalább három releváns Claude Code plugin vagy skill.
 
 ### Nincs benne
@@ -403,8 +405,9 @@ A projekt döntéseinek elsődleges dokumentumai:
 - `architektura.md` — komponensek, felelősségek és biztonsági határok;
 - `konvenciok.md` — TypeScript-, fájlszervezési, tesztelési és naplózási szabályok;
 - `dev-workflow.md` — branching, Conventional Commits, hookok és kész-kritérium;
-- `system-prompt.md` — az L2 agent szerepe, séma- és SQL-szabályai;
-- `docs/roi.md` — az ötfős könyvelőiroda pénzügyi megtérülési levezetése.
+- `implementation-plan.md` — a végrehajtott fázisolt terv (környezet + 5 implementációs fázis);
+- `roi.md` — a hard ROI részletes, lépésenkénti levezetése;
+- az L2 agent tényleges system promptja kódban él: `packages/core/src/agents/ledgerbase/ledgerbase-prompt.ts` (séma, szabályok, toolok, példák).
 
 A README a futtatás és az első belépés dokumentuma. Részletes architekturális vagy üzleti döntést ne duplikáljon indokolatlanul: arra a fenti forrásdokumentumok szolgálnak.
 
