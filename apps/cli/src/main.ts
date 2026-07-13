@@ -1,7 +1,23 @@
 #!/usr/bin/env node
+import 'dotenv/config';
+
+import Anthropic from '@anthropic-ai/sdk';
+import { askAgent } from '@ledgerbase/core';
 import { Command } from 'commander';
 
 import { runAskCommand } from './ask-command.js';
+
+function createAnthropicClient(): Anthropic {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set.');
+  return new Anthropic({ apiKey });
+}
+
+function getModel(): string {
+  const model = process.env.ANTHROPIC_MODEL;
+  if (!model) throw new Error('ANTHROPIC_MODEL is not set.');
+  return model;
+}
 
 export function createProgram(): Command {
   const program = new Command();
@@ -27,7 +43,13 @@ export function createProgram(): Command {
         question: string | undefined,
         options: { showPrompt: boolean },
       ) => {
-        await runAskCommand({ question, showPrompt: options.showPrompt });
+        const client = createAnthropicClient();
+        const model = getModel();
+
+        await runAskCommand(
+          { question, showPrompt: options.showPrompt },
+          { askAgent: (q) => askAgent({ client, model, question: q }) },
+        );
       },
     );
 

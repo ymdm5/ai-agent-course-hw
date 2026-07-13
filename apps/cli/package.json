@@ -99,6 +99,9 @@
     }
   },
   "dependencies": {
-    "commander": "^15.0.0"
+    "@anthropic-ai/sdk": "^0.111.0",
+    "@ledgerbase/core": "workspace:*",
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2"
   }
 }
