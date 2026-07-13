@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      LEDGERBASE_RO_USER: ${POSTGRES_RO_USER}
+      LEDGERBASE_RO_PASSWORD: ${POSTGRES_RO_PASSWORD}
+    ports:
+      - '${POSTGRES_PORT}:5432'
+    volumes:
+      - ledgerbase-postgres-data:/var/lib/postgresql
+      - ./docker/init-readonly-role.sh:/docker-entrypoint-initdb.d/10-init-readonly-role.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ledgerbase-postgres-data:
