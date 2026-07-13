@@ -21,7 +21,6 @@ const FORBIDDEN_KEYWORDS = [
   'VACUUM',
   'EXECUTE',
   'MERGE',
-  'REPLACE',
   'RENAME',
 ];
 
@@ -48,27 +47,49 @@ export function validateSql(sql: string): SqlGuardResult {
     };
   }
 
+  // Scan for forbidden keywords with string-literal content masked out, so a
+  // keyword can't (a) hide inside a comment (stripComments, above) or
+  // (b) be mistaken for one because it appears inside a quoted search string.
+  const maskedStatement = maskStringLiterals(statement);
   for (const keyword of FORBIDDEN_KEYWORDS) {
-    if (new RegExp(`\\b${keyword}\\b`, 'i').test(statement)) {
+    if (new RegExp(`\\b${keyword}\\b`, 'i').test(maskedStatement)) {
       return { valid: false, reason: `Forbidden keyword: ${keyword}` };
     }
   }
 
-  const allowedNames = new Set([
-    ...ALLOWED_TABLES,
-    ...extractCteNames(statement).map((name) => name.toLowerCase()),
-  ]);
-  for (const table of extractReferencedTables(statement)) {
-    if (!allowedNames.has(table.toLowerCase())) {
-      return { valid: false, reason: `Table not allowed: ${table}` };
+  const ctes = extractCtes(statement);
+  const referencedTables = extractReferencedTables(statement);
+
+  if (referencedTables.length === 0) {
+    return {
+      valid: false,
+      reason: 'The statement must reference at least one allowed table.',
+    };
+  }
+
+  for (const table of referencedTables) {
+    const cte = ctes.find(
+      (c) => c.name.toLowerCase() === table.name.toLowerCase(),
+    );
+    if (cte) {
+      // A non-recursive CTE's name is not visible inside its own body, so a
+      // reference to it *within* its own defining span is not a legitimate
+      // use of the CTE — it would resolve to a real table of the same name
+      // in Postgres, which is exactly the bypass this check closes.
+      const withinOwnBody =
+        table.index >= cte.bodyStart && table.index < cte.bodyEnd;
+      if (!withinOwnBody) continue;
+    }
+    if (!ALLOWED_TABLES.has(table.name.toLowerCase())) {
+      return { valid: false, reason: `Table not allowed: ${table.name}` };
     }
   }
 
-  const limitMatch = /\bLIMIT\s+(\d+)\b/i.exec(statement);
-  if (!limitMatch) {
+  const topLevelLimit = findTopLevelLimit(statement);
+  if (topLevelLimit === null) {
     return { valid: false, reason: 'A LIMIT clause is required.' };
   }
-  if (Number(limitMatch[1]) > MAX_RESULT_LIMIT) {
+  if (topLevelLimit > MAX_RESULT_LIMIT) {
     return {
       valid: false,
       reason: `LIMIT exceeds the maximum allowed result size of ${MAX_RESULT_LIMIT}.`,
@@ -110,6 +131,32 @@ function stripComments(sql: string): string {
   return result;
 }
 
+// Replaces the *content* of single-quoted string literals with a character
+// that can't match a keyword's \b...\b regex, while preserving the original
+// length/positions (quotes and everything outside literals stay untouched).
+function maskStringLiterals(sql: string): string {
+  let result = '';
+  let inString = false;
+  for (const ch of sql) {
+    if (inString) {
+      if (ch === "'") {
+        inString = false;
+        result += ch;
+      } else {
+        result += '#';
+      }
+      continue;
+    }
+    if (ch === "'") {
+      inString = true;
+      result += ch;
+      continue;
+    }
+    result += ch;
+  }
+  return result;
+}
+
 // Splits on semicolons outside of string literals; a single trailing
 // semicolon is allowed, but more than one non-empty statement is rejected.
 function splitStatements(sql: string): string[] {
@@ -138,14 +185,115 @@ function splitStatements(sql: string): string[] {
   return statements;
 }
 
-function extractReferencedTables(statement: string): string[] {
-  const pattern = /\b(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi;
-  return [...statement.matchAll(pattern)].map((match) => match[1]);
+interface TableReference {
+  name: string;
+  index: number;
 }
 
-// CTE aliases (WITH name AS (...)) are not real tables but are legitimate
-// references within the statement that defines them.
-function extractCteNames(statement: string): string[] {
-  const pattern = /([a-zA-Z_][a-zA-Z0-9_]*)\s+AS\s*\(/gi;
-  return [...statement.matchAll(pattern)].map((match) => match[1]);
+// Matches identifiers (bare or double-quoted) introduced by FROM or JOIN,
+// including comma-separated lists after FROM (old-style implicit joins).
+function extractReferencedTables(statement: string): TableReference[] {
+  const identifier = '(?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*)';
+  const references: TableReference[] = [];
+
+  const fromListPattern = new RegExp(
+    `\\bFROM\\s+(${identifier}(?:\\s*,\\s*${identifier})*)`,
+    'gi',
+  );
+  for (const match of statement.matchAll(fromListPattern)) {
+    const listStart = match.index + match[0].indexOf(match[1]);
+    let cursor = listStart;
+    for (const part of match[1].split(',')) {
+      const partIndex = statement.indexOf(part.trim(), cursor);
+      references.push({
+        name: normalizeIdentifier(part.trim()),
+        index: partIndex,
+      });
+      cursor = partIndex + part.trim().length;
+    }
+  }
+
+  const joinPattern = new RegExp(`\\bJOIN\\s+(${identifier})`, 'gi');
+  for (const match of statement.matchAll(joinPattern)) {
+    const index = match.index + match[0].indexOf(match[1]);
+    references.push({ name: normalizeIdentifier(match[1]), index });
+  }
+
+  return references;
+}
+
+function normalizeIdentifier(identifier: string): string {
+  return identifier.startsWith('"') && identifier.endsWith('"')
+    ? identifier.slice(1, -1)
+    : identifier;
+}
+
+interface CteDefinition {
+  name: string;
+  bodyStart: number;
+  bodyEnd: number;
+}
+
+// Walks only the top-level WITH clause header (name AS ( ... ), name AS ( ... ), ...),
+// tracking parenthesis depth so it never wanders into the final SELECT or a
+// nested subquery. Returns each CTE's own body span so callers can tell a
+// legitimate external reference to the CTE apart from a same-named reference
+// inside the CTE's own (non-recursive) body.
+function extractCtes(statement: string): CteDefinition[] {
+  const withMatch = /^\s*WITH\s+/i.exec(statement);
+  if (!withMatch) return [];
+
+  const ctes: CteDefinition[] = [];
+  let i = withMatch[0].length;
+
+  for (;;) {
+    while (i < statement.length && /\s/.test(statement[i])) i++;
+    const identMatch = /^[a-zA-Z_][a-zA-Z0-9_]*/.exec(statement.slice(i));
+    if (!identMatch) break;
+    const name = identMatch[0];
+    i += name.length;
+
+    while (i < statement.length && /\s/.test(statement[i])) i++;
+    const asMatch = /^AS\s*\(/i.exec(statement.slice(i));
+    if (!asMatch) break;
+    i += asMatch[0].length;
+    const bodyStart = i;
+
+    let depth = 1;
+    while (i < statement.length && depth > 0) {
+      if (statement[i] === '(') depth++;
+      else if (statement[i] === ')') depth--;
+      i++;
+    }
+    const bodyEnd = i - 1;
+    ctes.push({ name, bodyStart, bodyEnd });
+
+    while (i < statement.length && /\s/.test(statement[i])) i++;
+    if (statement[i] === ',') {
+      i++;
+      continue;
+    }
+    break;
+  }
+
+  return ctes;
+}
+
+// Finds the LIMIT clause belonging to the outermost statement (parenthesis
+// depth 0) — a LIMIT inside a subquery or CTE body must not stand in for the
+// limit on what's actually returned to the caller.
+function findTopLevelLimit(statement: string): number | null {
+  const limitPattern = /\bLIMIT\s+(\d+)\b/gi;
+  let result: number | null = null;
+  for (const match of statement.matchAll(limitPattern)) {
+    let depth = 0;
+    for (let i = 0; i < match.index; i++) {
+      if (statement[i] === '(') depth++;
+      else if (statement[i] === ')') depth--;
+    }
+    if (depth === 0) {
+      result = Number(match[1]);
+    }
+  }
+  return result;
 }
