@@ -1,4 +1,5 @@
 import type { AgentTool } from '../../agents/agent-loop.js';
+import { getErrorMessage } from '../../errors/get-error-message.js';
 import type { ToolOutcome } from '../tool-outcome.js';
 import {
   ListTaskCategoriesInputSchema,
@@ -40,10 +41,10 @@ export function createListTaskCategoriesTool(
       } catch (error) {
         return {
           ok: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Database error while listing task categories.',
+          error: getErrorMessage(
+            error,
+            'Database error while listing task categories.',
+          ),
           category: 'database_error',
         };
       }

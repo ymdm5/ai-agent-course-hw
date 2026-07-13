@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
 import { AgentError } from '../errors/agent-error.js';
+import { getErrorMessage } from '../errors/get-error-message.js';
 import type { AuditLogger } from '../logging/audit-logger.js';
 import type { ToolOutcome } from '../tools/tool-outcome.js';
 
@@ -63,8 +64,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<string> {
         tools: tools.length > 0 ? tools.map(toAnthropicTool) : undefined,
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'The model call failed.';
+      const message = getErrorMessage(error, 'The model call failed.');
       logger?.log({
         runId,
         eventType: 'error',
@@ -177,7 +177,7 @@ async function dispatchTool(
   } catch (error) {
     outcome = {
       ok: false,
-      error: error instanceof Error ? error.message : 'Tool execution failed.',
+      error: getErrorMessage(error, 'Tool execution failed.'),
       category: 'tool_execution_error',
     };
   }

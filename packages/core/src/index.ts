@@ -21,3 +21,4 @@ export { redactSecretsInString } from './logging/secret-redaction.js';
 
 export { AgentError } from './errors/agent-error.js';
 export type { AgentErrorCategory } from './errors/agent-error.js';
+export { getErrorMessage } from './errors/get-error-message.js';

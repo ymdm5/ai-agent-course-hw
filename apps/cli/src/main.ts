@@ -8,29 +8,17 @@ import {
   createListTaskCategoriesTool,
   createReadonlyDatabaseClient,
   createRunSqlTool,
+  getErrorMessage,
 } from '@ledgerbase/core';
 import { Command } from 'commander';
 
 import { runAskCommand } from './ask-command.js';
 import { formatErrorMessage } from './format-error-message.js';
 import { createJsonlFileSink } from './jsonl-file-sink.js';
+import { requireEnv } from './require-env.js';
 
 function createAnthropicClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set.');
-  return new Anthropic({ apiKey });
-}
-
-function getModel(): string {
-  const model = process.env.ANTHROPIC_MODEL;
-  if (!model) throw new Error('ANTHROPIC_MODEL is not set.');
-  return model;
-}
-
-function getReadonlyDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL_READONLY;
-  if (!url) throw new Error('DATABASE_URL_READONLY is not set.');
-  return url;
+  return new Anthropic({ apiKey: requireEnv('ANTHROPIC_API_KEY') });
 }
 
 export function createProgram(): Command {
@@ -64,8 +52,10 @@ export function createProgram(): Command {
 
         try {
           const client = createAnthropicClient();
-          const model = getModel();
-          readonlyDb = createReadonlyDatabaseClient(getReadonlyDatabaseUrl());
+          const model = requireEnv('ANTHROPIC_MODEL');
+          readonlyDb = createReadonlyDatabaseClient(
+            requireEnv('DATABASE_URL_READONLY'),
+          );
           const tools = [
             createRunSqlTool({ query: readonlyDb.query }),
             createListTaskCategoriesTool({ query: readonlyDb.query }),
@@ -96,6 +86,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
+  console.error(getErrorMessage(error, String(error)));
   process.exitCode = 1;
 });

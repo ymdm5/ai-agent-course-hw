@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { AgentTool } from '../../agents/agent-loop.js';
+import { getErrorMessage } from '../../errors/get-error-message.js';
 import type { ToolOutcome } from '../tool-outcome.js';
 import { validateSql } from './sql-guard.js';
 
@@ -60,10 +61,10 @@ export function createRunSqlTool(deps: RunSqlToolDeps): AgentTool {
       } catch (error) {
         return {
           ok: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Database error while running the query.',
+          error: getErrorMessage(
+            error,
+            'Database error while running the query.',
+          ),
           category: 'database_error',
         };
       }
