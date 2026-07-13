@@ -28,6 +28,7 @@ export function createListTaskCategoriesTool(
         return {
           ok: false,
           error: 'Invalid listTaskCategories input: expected no arguments.',
+          category: 'input_validation',
         };
       }
 
@@ -43,6 +44,7 @@ export function createListTaskCategoriesTool(
             error instanceof Error
               ? error.message
               : 'Database error while listing task categories.',
+          category: 'database_error',
         };
       }
     },

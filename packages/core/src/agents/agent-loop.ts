@@ -1,5 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
+import { AgentError } from '../errors/agent-error.js';
+import type { AuditLogger } from '../logging/audit-logger.js';
 import type { ToolOutcome } from '../tools/tool-outcome.js';
 
 export interface MessagesClient {
@@ -24,6 +26,8 @@ export interface AgentLoopOptions {
   messages: Anthropic.MessageParam[];
   tools?: AgentTool[];
   maxSteps?: number;
+  logger?: AuditLogger;
+  runId?: string;
 }
 
 const DEFAULT_MAX_STEPS = 5;
@@ -35,17 +39,50 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<string> {
     system,
     tools = [],
     maxSteps = DEFAULT_MAX_STEPS,
+    logger,
+    runId = 'unknown',
   } = options;
   const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
   const conversation: Anthropic.MessageParam[] = [...options.messages];
 
   for (let step = 0; step < maxSteps; step++) {
-    const response = await client.messages.create({
-      model,
-      system,
-      max_tokens: 1024,
-      messages: conversation,
-      tools: tools.length > 0 ? tools.map(toAnthropicTool) : undefined,
+    logger?.log({
+      runId,
+      eventType: 'model_request',
+      step,
+      data: { messagesSent: conversation.length },
+    });
+
+    let response: Anthropic.Message;
+    try {
+      response = await client.messages.create({
+        model,
+        system,
+        max_tokens: 1024,
+        messages: conversation,
+        tools: tools.length > 0 ? tools.map(toAnthropicTool) : undefined,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'The model call failed.';
+      logger?.log({
+        runId,
+        eventType: 'error',
+        step,
+        data: { category: 'llm_error', message },
+      });
+      throw new AgentError('llm_error', message);
+    }
+
+    logger?.log({
+      runId,
+      eventType: 'model_response',
+      step,
+      data: {
+        stopReason: response.stop_reason,
+        inputTokens: response.usage?.input_tokens,
+        outputTokens: response.usage?.output_tokens,
+      },
     });
 
     if (response.stop_reason === 'end_turn') {
@@ -53,9 +90,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<string> {
     }
 
     if (response.stop_reason !== 'tool_use') {
-      throw new Error(
-        `Unexpected stop_reason from model: ${response.stop_reason}`,
-      );
+      const message = `Unexpected stop_reason from model: ${response.stop_reason}`;
+      logger?.log({
+        runId,
+        eventType: 'error',
+        step,
+        data: { category: 'llm_error', message },
+      });
+      throw new AgentError('llm_error', message);
     }
 
     conversation.push({ role: 'assistant', content: response.content });
@@ -63,13 +105,19 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<string> {
       role: 'user',
       content: await Promise.all(
         extractToolUseBlocks(response).map((block) =>
-          dispatchTool(block, toolsByName),
+          dispatchTool(block, toolsByName, logger, runId, step),
         ),
       ),
     });
   }
 
-  throw new Error('Maximum agent steps reached without a final answer.');
+  const message = 'Maximum agent steps reached without a final answer.';
+  logger?.log({
+    runId,
+    eventType: 'error',
+    data: { category: 'max_steps_reached', message },
+  });
+  throw new AgentError('max_steps_reached', message);
 }
 
 function toAnthropicTool(tool: AgentTool): Anthropic.Tool {
@@ -91,9 +139,30 @@ function extractToolUseBlocks(
 async function dispatchTool(
   block: Anthropic.ToolUseBlock,
   toolsByName: Map<string, AgentTool>,
+  logger: AuditLogger | undefined,
+  runId: string,
+  step: number,
 ): Promise<Anthropic.ToolResultBlockParam> {
+  logger?.log({
+    runId,
+    eventType: 'tool_call',
+    step,
+    data: { toolName: block.name, input: block.input },
+  });
+
   const tool = toolsByName.get(block.name);
   if (!tool) {
+    logger?.log({
+      runId,
+      eventType: 'tool_result',
+      step,
+      data: {
+        toolName: block.name,
+        ok: false,
+        category: 'input_validation',
+        error: 'Unknown tool',
+      },
+    });
     return {
       type: 'tool_result',
       tool_use_id: block.id,
@@ -109,8 +178,27 @@ async function dispatchTool(
     outcome = {
       ok: false,
       error: error instanceof Error ? error.message : 'Tool execution failed.',
+      category: 'tool_execution_error',
     };
   }
+
+  logger?.log({
+    runId,
+    eventType: 'tool_result',
+    step,
+    data: outcome.ok
+      ? {
+          toolName: block.name,
+          ok: true,
+          resultPreview: truncate(JSON.stringify(outcome.data)),
+        }
+      : {
+          toolName: block.name,
+          ok: false,
+          error: outcome.error,
+          category: outcome.category,
+        },
+  });
 
   return outcome.ok
     ? {
@@ -124,6 +212,14 @@ async function dispatchTool(
         content: outcome.error,
         is_error: true,
       };
+}
+
+const MAX_RESULT_PREVIEW_LENGTH = 1000;
+
+function truncate(text: string): string {
+  return text.length > MAX_RESULT_PREVIEW_LENGTH
+    ? `${text.slice(0, MAX_RESULT_PREVIEW_LENGTH - 1)}…`
+    : text;
 }
 
 function extractText(message: Anthropic.Message): string {

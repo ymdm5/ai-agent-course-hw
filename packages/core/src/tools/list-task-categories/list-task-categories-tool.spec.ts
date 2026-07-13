@@ -52,7 +52,7 @@ describe('createListTaskCategoriesTool', () => {
     expect(sql).not.toContain(';;');
   });
 
-  it('returns a controlled error outcome when the database query fails', async () => {
+  it('returns a database_error outcome when the database query fails', async () => {
     const query = vi.fn(async () => {
       throw new Error('connection lost');
     });
@@ -60,6 +60,10 @@ describe('createListTaskCategoriesTool', () => {
 
     const outcome = await tool.execute({});
 
-    expect(outcome).toEqual({ ok: false, error: 'connection lost' });
+    expect(outcome).toEqual({
+      ok: false,
+      error: 'connection lost',
+      category: 'database_error',
+    });
   });
 });

@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 
+import type { AuditEventInput } from '../logging/audit-event-schema.js';
 import {
   runAgentLoop,
   type AgentTool,
@@ -38,6 +39,14 @@ function fakeSequentialClient(
   return { client, calls };
 }
 
+function fakeLogger() {
+  const events: AuditEventInput[] = [];
+  return {
+    logger: { log: (event: AuditEventInput) => events.push(event) },
+    events,
+  };
+}
+
 describe('runAgentLoop', () => {
   it('returns the concatenated text blocks when the model ends its turn', async () => {
     const client = fakeClient({
@@ -55,7 +64,7 @@ describe('runAgentLoop', () => {
     expect(result).toBe('Hello there!');
   });
 
-  it('throws a clear error for an unexpected stop reason', async () => {
+  it('throws an llm_error AgentError for an unexpected stop reason', async () => {
     const client = fakeClient({ content: [], stop_reason: 'max_tokens' });
 
     await expect(
@@ -65,7 +74,29 @@ describe('runAgentLoop', () => {
         system: 'system prompt',
         messages: [{ role: 'user', content: 'hi' }],
       }),
-    ).rejects.toThrow('max_tokens');
+    ).rejects.toMatchObject({ category: 'llm_error' });
+  });
+
+  it('throws an llm_error AgentError when the SDK call itself throws', async () => {
+    const client: MessagesClient = {
+      messages: {
+        create: async () => {
+          throw new Error('network timeout');
+        },
+      },
+    };
+
+    await expect(
+      runAgentLoop({
+        client,
+        model: 'm',
+        system: 's',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    ).rejects.toMatchObject({
+      category: 'llm_error',
+      message: 'network timeout',
+    });
   });
 
   it('sends the registered tool definitions to the model', async () => {
@@ -177,7 +208,46 @@ describe('runAgentLoop', () => {
     });
   });
 
-  it('throws after reaching the max step limit without a final answer', async () => {
+  it('tags an uncaught tool exception as tool_execution_error in the tool_result event', async () => {
+    const { client } = fakeSequentialClient([
+      {
+        content: [
+          { type: 'tool_use', id: 'tool_1', name: 'crashingTool', input: {} },
+        ],
+        stop_reason: 'tool_use',
+      },
+      { content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' },
+    ]);
+    const { logger, events } = fakeLogger();
+
+    const crashingTool: AgentTool = {
+      name: 'crashingTool',
+      description: '',
+      inputSchema: { type: 'object', properties: {} },
+      execute: async () => {
+        throw new Error('boom');
+      },
+    };
+
+    await runAgentLoop({
+      client,
+      model: 'm',
+      system: 's',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [crashingTool],
+      logger,
+      runId: 'run-1',
+    });
+
+    const toolResultEvent = events.find((e) => e.eventType === 'tool_result');
+    expect(toolResultEvent?.data).toMatchObject({
+      toolName: 'crashingTool',
+      ok: false,
+      category: 'tool_execution_error',
+    });
+  });
+
+  it('throws a max_steps_reached AgentError after reaching the max step limit without a final answer', async () => {
     const alwaysToolUse = {
       content: [{ type: 'tool_use', id: 't', name: 'noop', input: {} }],
       stop_reason: 'tool_use',
@@ -204,6 +274,105 @@ describe('runAgentLoop', () => {
         tools: [noopTool],
         maxSteps: 2,
       }),
-    ).rejects.toThrow('Maximum agent steps');
+    ).rejects.toMatchObject({ category: 'max_steps_reached' });
+  });
+
+  it('logs model_request/model_response and tool_call/tool_result events when a logger is provided', async () => {
+    const { client } = fakeSequentialClient([
+      {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tool_1',
+            name: 'echoTool',
+            input: { value: 'hi' },
+          },
+        ],
+        stop_reason: 'tool_use',
+      },
+      {
+        content: [{ type: 'text', text: 'Final answer' }],
+        stop_reason: 'end_turn',
+      },
+    ]);
+    const { logger, events } = fakeLogger();
+    const echoTool: AgentTool = {
+      name: 'echoTool',
+      description: 'echoes input',
+      inputSchema: { type: 'object', properties: {} },
+      execute: async (input) => ({ ok: true, data: input }),
+    };
+
+    await runAgentLoop({
+      client,
+      model: 'm',
+      system: 's',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [echoTool],
+      logger,
+      runId: 'run-1',
+    });
+
+    const eventTypes = events.map((e) => e.eventType);
+    expect(eventTypes).toEqual([
+      'model_request',
+      'model_response',
+      'tool_call',
+      'tool_result',
+      'model_request',
+      'model_response',
+    ]);
+    expect(events.every((e) => e.runId === 'run-1')).toBe(true);
+    const toolCallEvent = events.find((e) => e.eventType === 'tool_call');
+    expect(toolCallEvent?.data).toMatchObject({
+      toolName: 'echoTool',
+      input: { value: 'hi' },
+    });
+    const toolResultEvent = events.find((e) => e.eventType === 'tool_result');
+    expect(toolResultEvent?.data).toMatchObject({
+      toolName: 'echoTool',
+      ok: true,
+      resultPreview: JSON.stringify({ value: 'hi' }),
+    });
+  });
+
+  it('truncates an oversized tool result before logging it', async () => {
+    const largeArray = Array.from({ length: 500 }, (_, i) => ({
+      id: i,
+      name: `row-${i}`,
+    }));
+    const { client } = fakeSequentialClient([
+      {
+        content: [
+          { type: 'tool_use', id: 'tool_1', name: 'bigTool', input: {} },
+        ],
+        stop_reason: 'tool_use',
+      },
+      { content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' },
+    ]);
+    const { logger, events } = fakeLogger();
+    const bigTool: AgentTool = {
+      name: 'bigTool',
+      description: '',
+      inputSchema: { type: 'object', properties: {} },
+      execute: async () => ({ ok: true, data: largeArray }),
+    };
+
+    await runAgentLoop({
+      client,
+      model: 'm',
+      system: 's',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [bigTool],
+      logger,
+      runId: 'run-1',
+    });
+
+    const toolResultEvent = events.find((e) => e.eventType === 'tool_result');
+    const preview =
+      (toolResultEvent?.data as { resultPreview?: string })?.resultPreview ??
+      '';
+    expect(preview.length).toBeLessThan(JSON.stringify(largeArray).length);
+    expect(preview.length).toBeLessThanOrEqual(1000);
   });
 });

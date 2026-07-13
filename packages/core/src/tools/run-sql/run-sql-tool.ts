@@ -32,12 +32,17 @@ export function createRunSqlTool(deps: RunSqlToolDeps): AgentTool {
         return {
           ok: false,
           error: 'Invalid runSql input: expected { sql: string }.',
+          category: 'input_validation',
         };
       }
 
       const guardResult = validateSql(parsed.data.sql);
       if (!guardResult.valid) {
-        return { ok: false, error: guardResult.reason };
+        return {
+          ok: false,
+          error: guardResult.reason,
+          category: 'sql_guard_rejected',
+        };
       }
 
       try {
@@ -50,6 +55,7 @@ export function createRunSqlTool(deps: RunSqlToolDeps): AgentTool {
             error instanceof Error
               ? error.message
               : 'Database error while running the query.',
+          category: 'database_error',
         };
       }
     },
