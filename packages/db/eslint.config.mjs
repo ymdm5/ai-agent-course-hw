@@ -12,6 +12,9 @@ export default [
             '{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}',
             '{projectRoot}/vitest.config.{js,ts,mjs,mts}',
           ],
+          // @prisma/client: only referenced from generated code (excluded from lint below).
+          // pg: required transitively by @prisma/adapter-pg's connection pooling.
+          ignoredDependencies: ['@prisma/client', 'pg'],
         },
       ],
     },
@@ -20,6 +23,6 @@ export default [
     },
   },
   {
-    ignores: ['**/out-tsc'],
+    ignores: ['**/out-tsc', 'src/generated/**'],
   },
 ];

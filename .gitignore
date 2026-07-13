@@ -149,4 +149,4 @@ out-tsc/
 tmp/
 
 # Prisma generated client
-packages/db/generated/
+packages/db/src/generated/

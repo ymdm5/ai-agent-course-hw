@@ -1,0 +1,89 @@
+generator client {
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Employee {
+  id     Int     @id @default(autoincrement())
+  name   String
+  role   String
+  active Boolean @default(true)
+
+  assignedClients Client[]
+  assignedTasks   Task[]
+
+  @@map("employees")
+}
+
+model Client {
+  id                 Int     @id @default(autoincrement())
+  name               String
+  vatFrequency       String  @map("vat_frequency")
+  assignedEmployeeId Int     @map("assigned_employee_id")
+  active             Boolean @default(true)
+
+  assignedEmployee     Employee              @relation(fields: [assignedEmployeeId], references: [id])
+  tasks                Task[]
+  documentRequirements DocumentRequirement[]
+
+  @@map("clients")
+}
+
+model TaskCategory {
+  id          Int     @id @default(autoincrement())
+  code        String  @unique
+  name        String  @unique
+  description String?
+
+  tasks Task[]
+
+  @@map("task_categories")
+}
+
+model Task {
+  id                 Int       @id @default(autoincrement())
+  clientId           Int       @map("client_id")
+  assignedEmployeeId Int       @map("assigned_employee_id")
+  categoryId         Int       @map("category_id")
+  title              String
+  periodStart        DateTime? @map("period_start") @db.Date
+  dueDate            DateTime  @map("due_date") @db.Date
+  status             String
+  priority           String
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  client           Client       @relation(fields: [clientId], references: [id])
+  assignedEmployee Employee     @relation(fields: [assignedEmployeeId], references: [id])
+  category         TaskCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([dueDate])
+  @@index([status])
+  @@index([clientId])
+  @@index([assignedEmployeeId])
+  @@index([categoryId])
+  @@map("tasks")
+}
+
+model DocumentRequirement {
+  id           Int       @id @default(autoincrement())
+  clientId     Int       @map("client_id")
+  documentType String    @map("document_type")
+  periodStart  DateTime  @map("period_start") @db.Date
+  status       String
+  dueDate      DateTime  @map("due_date") @db.Date
+  receivedAt   DateTime? @map("received_at")
+  verifiedAt   DateTime? @map("verified_at")
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@index([dueDate])
+  @@index([status])
+  @@index([clientId])
+  @@map("document_requirements")
+}

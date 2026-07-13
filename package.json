@@ -7,7 +7,10 @@
     "typecheck": "nx run-many -t typecheck",
     "lint": "nx run-many -t lint",
     "test": "nx run-many -t test",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "db:migrate": "prisma migrate dev --config packages/db/prisma.config.ts",
+    "db:seed": "prisma db seed --config packages/db/prisma.config.ts",
+    "db:studio": "prisma studio --config packages/db/prisma.config.ts"
   },
   "private": true,
   "devDependencies": {
@@ -23,18 +26,19 @@
     "@swc/helpers": "0.5.18",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "~4.1.0",
+    "dotenv": "^17.4.2",
     "esbuild": "^0.27.0",
     "eslint": "^9.8.0",
     "eslint-config-prettier": "^10.0.0",
     "jsonc-eslint-parser": "^2.1.0",
     "nx": "23.0.1",
     "prettier": "^3.8.1",
+    "prisma": "^7.8.0",
     "tslib": "^2.3.0",
     "tsx": "^4.19.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.40.0",
     "vite": "^8.0.0",
     "vitest": "~4.1.0"
-  },
-  "dependencies": {}
+  }
 }
