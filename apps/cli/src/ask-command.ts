@@ -1,5 +1,7 @@
 import * as readline from 'node:readline';
 
+import { formatErrorMessage } from './format-error-message.js';
+
 export interface AskAgentResult {
   answer: string;
   systemPrompt: string;
@@ -53,8 +55,12 @@ async function runInteractiveAsk(
   });
   for await (const line of rl) {
     if (EXIT_COMMANDS.has(line.trim().toLowerCase())) break;
-    const result = await askAgent(line);
-    writeResult(result, showPrompt, streams);
+    try {
+      const result = await askAgent(line);
+      writeResult(result, showPrompt, streams);
+    } catch (error) {
+      streams.output.write(`${formatErrorMessage(error)}\n`);
+    }
   }
   rl.close();
 }

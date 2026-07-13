@@ -59,17 +59,18 @@ export function createProgram(): Command {
       ) => {
         const sink = createJsonlFileSink('logs');
         const logger = createAuditLogger(sink);
-        const client = createAnthropicClient();
-        const model = getModel();
-        const readonlyDb = createReadonlyDatabaseClient(
-          getReadonlyDatabaseUrl(),
-        );
-        const tools = [
-          createRunSqlTool({ query: readonlyDb.query }),
-          createListTaskCategoriesTool({ query: readonlyDb.query }),
-        ];
 
         try {
+          const client = createAnthropicClient();
+          const model = getModel();
+          const readonlyDb = createReadonlyDatabaseClient(
+            getReadonlyDatabaseUrl(),
+          );
+          const tools = [
+            createRunSqlTool({ query: readonlyDb.query }),
+            createListTaskCategoriesTool({ query: readonlyDb.query }),
+          ];
+
           await runAskCommand(
             { question, showPrompt: options.showPrompt },
             {

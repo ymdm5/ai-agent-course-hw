@@ -92,4 +92,28 @@ describe('runAskCommand', () => {
       'visszhang: első kérdés\nvisszhang: második kérdés\n',
     );
   });
+
+  it('continues the interactive loop after a line makes the agent throw', async () => {
+    const input = new PassThrough();
+    const { output, getText } = collectOutput();
+    const askAgent = vi.fn(async (question: string) => {
+      if (question === 'rossz kérdés') throw new Error('boom');
+      return fakeResult(`visszhang: ${question}`, question);
+    });
+
+    const done = runAskCommand(
+      { question: undefined, showPrompt: false },
+      { askAgent, streams: { input, output } },
+    );
+
+    input.write('rossz kérdés\n');
+    input.write('jó kérdés\n');
+    input.write('exit\n');
+    input.end();
+
+    await done;
+
+    expect(askAgent).toHaveBeenCalledTimes(2);
+    expect(getText()).toContain('visszhang: jó kérdés');
+  });
 });
