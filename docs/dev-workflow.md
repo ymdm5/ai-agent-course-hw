@@ -140,6 +140,35 @@ A projekt Windows alatt WSL-ben fut. A hookokat, a `pnpm` parancsokat, a Git-mű
 
 A hookokban használt shell-parancsokat ne PowerShell-specifikus szintaxissal írjuk.
 
+## Claude Code pluginek és MCP-szerverek
+
+A `.claude/settings.json` engedélyezett pluginjei és a `.mcp.json` MCP-szerverei nem
+alapértelmezésből kerültek be, hanem konkrét, ismétlődő fejlesztési igényt fedeznek le:
+
+- **`superpowers`** — a projekt fejlesztési folyamata (dokumentum-elsőségű tervezés,
+  fázisos build, TDD, systematic debugging, code review checkpointok) erre a skill-keretre
+  épül; enélkül ezek a lépések ad-hoc, session-ről session-re változó módon futnának.
+- **`commit-commands`** — a Conventional Commits-formátumú, egy-lépés-egy-commit
+  fegyelmet (lásd fent) segíti commit-üzenet generálással; a commit tartalmát és
+  üzenetét ettől függetlenül mindig a felhasználó review-zza, a plugin csak a
+  formázási/összefoglalási terhet veszi le.
+- **`skill-creator`** — a projekt-specifikus skillek (pl. a `/docs`-frissítést végző
+  `ddd-audit`) létrehozásához és karbantartásához kell; ezek nem a Claude Code
+  beépített skilljei, hanem a Ledgerbase-hez írt, saját folyamatot kódoló skillek.
+
+MCP-szerverek (`.mcp.json`, project scope):
+
+- **`github`** — PR- és issue-műveletek a Claude Code-on belülről, hogy a
+  branch/PR-workflow (lásd fent) ne igényeljen külön böngészőváltást.
+- **`prisma`** — séma- és migrációvizsgálat a `DATABASE_URL` (read-write) kapcsolaton;
+  kizárólag a Prisma-oldalhoz kötött, sosem az agent futásidejéhez — összhangban a
+  README-ben és `architektura.md`-ban rögzített két-DB-role szabállyal.
+- **`postgres`** — ad-hoc, Claude Code-on belüli adatbázis-vizsgálathoz a
+  `DATABASE_URL_READONLY`-t olvassa a környezetből, nem a connection stringet a
+  `.mcp.json`-ba égetve. Ez ugyanazt a két-DB-role elvet tartja be a fejlesztői
+  eszköz szintjén is, amit az agent `runSql` toolja a futásidőben: még a Claude
+  Code saját, exploratív lekérdezései sem tudnak írni az adatbázisba.
+
 ## `/docs` — dokumentáció a repositoryban
 
 ```text
